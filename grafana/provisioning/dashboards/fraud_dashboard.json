@@ -1,0 +1,321 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Total Transactions",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COUNT(*) FROM transactions",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Total Alerts",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COUNT(*) FROM alerts",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "GPT Escalations",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COUNT(*) FROM alerts WHERE detection_tier = 'gpt'",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Confirmed Fraud (GPT)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COUNT(*) FROM alerts WHERE gpt_is_fraud = true",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 0.8 }
+            ]
+          },
+          "unit": "percentunit",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Avg Confidence Score",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COALESCE(ROUND(AVG(confidence_score)::numeric, 2), 0) FROM alerts",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 6,
+      "options": {
+        "tooltip": { "mode": "single" }
+      },
+      "title": "Alerts Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT date_trunc('minute', created_at) AS time, COUNT(*) AS alerts FROM alerts WHERE created_at > NOW() - INTERVAL '1 hour' GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 7,
+      "title": "Alerts by Risk Level",
+      "type": "piechart",
+      "options": {
+        "pieType": "pie",
+        "displayLabels": ["name", "value", "percent"],
+        "legendDisplayMode": "table",
+        "legendPlacement": "right"
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT COALESCE(gpt_risk_level, 'unescalated') AS \"Risk Level\", COUNT(*) AS \"Count\" FROM alerts GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": ["Risk Level"]
+          }
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 8,
+      "title": "Top Flagged Accounts",
+      "type": "barchart",
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT account_id, COUNT(*) AS alert_count FROM alerts GROUP BY account_id ORDER BY alert_count DESC LIMIT 10",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 9,
+      "title": "Detection Tier Breakdown",
+      "type": "piechart",
+      "options": {
+        "pieType": "pie",
+        "displayLabels": ["name", "value", "percent"],
+        "legendDisplayMode": "table",
+        "legendPlacement": "right"
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT detection_tier AS \"Tier\", COUNT(*) AS \"Count\" FROM alerts GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": ["Tier"]
+          }
+        }
+      ]
+    },
+    {
+      "datasource": "PostgreSQL",
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "amount" },
+            "properties": [{ "id": "unit", "value": "currencyUSD" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "confidence_score" },
+            "properties": [{ "id": "unit", "value": "percentunit" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+      "id": 10,
+      "title": "Recent Alerts Feed",
+      "type": "table",
+      "options": { "sortBy": [{ "displayName": "created_at", "desc": true }] },
+      "targets": [
+        {
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT a.created_at, a.account_id, t.amount, t.merchant, t.location, a.confidence_score, a.detection_tier, a.gpt_risk_level, a.gpt_reasoning FROM alerts a JOIN transactions t ON t.transaction_id = a.transaction_id ORDER BY a.created_at DESC LIMIT 20",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["fraud", "kafka", "real-time"],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Fraud Detection Dashboard",
+  "uid": "fraud-detection-v1",
+  "version": 1
+}

@@ -1,0 +1,194 @@
+
+networks:
+  fraud-net:
+    driver: bridge
+
+volumes:
+  fraud-postgres-data:
+  grafana-data:
+
+services:
+
+  # ── Zookeeper ────────────────────────────────────────────────────
+  # Kafka's coordination service — manages broker metadata, leader
+  # election, and consumer group offsets. Required for Kafka < 4.0.
+  # KRaft mode (Kafka without Zookeeper) is available but less mature
+  # for Docker setups — we use the proven Zookeeper pattern here.
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fraud_zookeeper
+    networks:
+      - fraud-net
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | timeout 2 bash -c 'cat < /dev/null > /dev/tcp/localhost/2181' && echo imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Kafka ────────────────────────────────────────────────────────
+  # The message broker. Two listener configs are critical:
+  # PLAINTEXT://kafka:9092        → internal Docker network (service-to-service)
+  # PLAINTEXT_HOST://localhost:9092 → external host machine (debugging)
+  # Without both, either internal OR external connections fail.
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fraud_kafka
+    networks:
+      - fraud-net
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_HEAP_OPTS: "-Xmx768m -Xms256m"
+    mem_limit: 1200m
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  # Stores transactions and alerts permanently.
+  # Port 5433 externally (not 5432) to coexist with Project 1.
+  # No pgvector needed here — transactions are structured data,
+  # not embeddings. Plain PostgreSQL 16 is sufficient.
+  db:
+    image: postgres:16
+    container_name: fraud_db
+    networks:
+      - fraud-net
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - fraud-postgres-data:/var/lib/postgresql/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Producer ─────────────────────────────────────────────────────
+  # Simulates the transaction stream. Starts only after Kafka is
+  # truly ready (health check passes). Restarts automatically if
+  # it crashes — important for long-running simulator processes.
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: fraud_producer
+    networks:
+      - fraud-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      RAW_TOPIC: ${RAW_TOPIC}
+      PRODUCER_TPS: ${PRODUCER_TPS}
+    mem_limit: 128m
+    restart: unless-stopped
+
+  # ── Processor ────────────────────────────────────────────────────
+  # The brain of the system. Consumes from Kafka, runs detection,
+  # writes to PostgreSQL, publishes alerts back to Kafka.
+  # Depends on both Kafka AND the database being ready.
+  processor:
+    build:
+      context: ./processor
+      dockerfile: Dockerfile
+    container_name: fraud_processor
+    networks:
+      - fraud-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      RAW_TOPIC: ${RAW_TOPIC}
+      ALERT_TOPIC: ${ALERT_TOPIC}
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ESCALATION_THRESHOLD: ${ESCALATION_THRESHOLD}
+      GPT_ESCALATION_ENABLED: ${GPT_ESCALATION_ENABLED}
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ── API ──────────────────────────────────────────────────────────
+  # FastAPI service. Port 8001 to avoid conflict with Project 1.
+  # Depends on DB and Kafka — needs both to serve live data
+  # and stream WebSocket alerts.
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: fraud_api
+    networks:
+      - fraud-net
+    ports:
+      - "8001:8000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      ALERT_TOPIC: ${ALERT_TOPIC}
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ── Grafana ──────────────────────────────────────────────────────
+  # Visualization layer. Port 3001 to avoid conflict with any
+  # local Node/React dev servers on 3000.
+  # Provisioning mounts auto-configure the PostgreSQL datasource
+  # and load the dashboard JSON — zero manual setup required.
+  # Trade-off: provisioned dashboards are read-only in the UI;
+  # edits must be made to the JSON file and restarted.
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: fraud_grafana
+    networks:
+      - fraud-net
+    ports:
+      - "3001:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    mem_limit: 256m
+    restart: unless-stopped

@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "fraud-detection-producer"
+version = "0.1.0"
+description = "Transaction stream simulator"
+authors = ["Your Name"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+kafka-python-ng = "^2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

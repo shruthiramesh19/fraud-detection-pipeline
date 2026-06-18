@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "fraud-detection-processor"
+version = "0.1.0"
+description = "Stream processor with fraud detection"
+authors = ["Your Name"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+kafka-python-ng = "^2.2"
+sqlalchemy = "^2.0"
+psycopg2-binary = "^2.9"
+openai = "^1.30"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
